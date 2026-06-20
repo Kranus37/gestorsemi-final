@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GestorSemi — Vendas</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav>
+  <a href="index.html" class="nav-brand">Gestor<span>Semi</span></a>
+  <a href="index.html">Dashboard</a>
+  <a href="produtos.html">Produtos</a>
+  <a href="vendas.html" class="ativo">Vendas</a>
+  <a href="estoque.html">Estoque</a>
+  <a href="relatorio.html">Relatório</a>
+  <a href="usuarios.html" id="linkUsuarios">Usuários</a>
+  <div id="navUsuario"></div>
+</nav>
+<div class="container">
+  <div class="page-header">
+    <h1>Vendas</h1>
+    <p>Registre e acompanhe todas as vendas por feira</p>
+  </div>
+  <div class="secao">
+    <div class="tabela-topo">
+      <span id="totalLabel" style="font-size:0.9rem;color:#888">Carregando...</span>
+      <button class="btn btn-primario" onclick="abrirModal()">+ Registrar venda</button>
+    </div>
+    <div class="tabela-wrapper">
+      <table>
+        <thead><tr><th>Data</th><th>Produto</th><th>Categoria</th><th>Feira</th><th>Qtd</th><th>Total</th><th>Registrado por</th><th>Ações</th></tr></thead>
+        <tbody id="tbody"><tr><td colspan="8" class="vazio">Carregando...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="overlay">
+  <div class="modal">
+    <h2>Registrar Venda</h2>
+    <div class="form-group"><label>Produto</label><select id="produtoId" onchange="atualizarPreco()"><option value="">Selecione...</option></select></div>
+    <div id="infoPreco" style="display:none;background:#fdf8f0;padding:10px 12px;border-radius:7px;font-size:0.85rem;color:#888;margin-bottom:16px;"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Quantidade</label><input type="number" id="quantidade" min="1" value="1" oninput="calcTotal()"></div>
+      <div class="form-group"><label>Total estimado</label><input type="text" id="totalEst" readonly style="background:#f5f5f5;font-weight:600;"></div>
+    </div>
+    <div class="form-group"><label>Feira</label><select id="feira"><option value="">Selecione a feira...</option><option>BsbMix</option><option>Feira da Lua</option><option>Outra</option></select></div>
+    <div class="form-group"><label>Data da venda</label><input type="date" id="data"></div>
+    <div class="modal-acoes">
+      <button class="btn btn-secundario" onclick="fechar()">Cancelar</button>
+      <button class="btn btn-primario" onclick="registrar()">Registrar</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="js/auth.js"></script>
+<script>
+  let cache = [];
+  function fmtData(d) { if (!d) return '-'; const [a,m,dia] = d.split('-'); return dia+'/'+m+'/'+a; }
+
+  async function init() {
+    const usuario = await verificarAuth();
+    if (!usuario) return;
+    configurarNavbar(usuario);
+    carregar();
+  }
+
+  async function carregar() {
+    const vendas = await fetch('/api/vendas').then(r => r.json());
+    document.getElementById('totalLabel').textContent = vendas.length + ' venda(s) registrada(s)';
+    const tbody = document.getElementById('tbody');
+    if (vendas.length === 0) { tbody.innerHTML = '<tr><td colspan="8" class="vazio">Nenhuma venda registrada.</td></tr>'; return; }
+    tbody.innerHTML = vendas.map(v =>
+      '<tr><td>' + fmtData(v.data) + '</td><td><strong>' + v.produto_nome + '</strong></td><td><span class="badge badge-dourado">' + v.produto_categoria + '</span></td><td><span class="badge badge-dourado">' + v.feira + '</span></td><td>' + v.quantidade + ' un.</td><td><strong>' + fmt(v.valor_total) + '</strong></td><td style="color:#888;font-size:0.85rem">' + (v.registrado_por || '—') + '</td><td><button class="btn btn-perigo" onclick="cancelar(' + v.id + ')">Cancelar</button></td></tr>'
+    ).join('');
+  }
+
+  async function abrirModal() {
+    cache = await fetch('/api/produtos').then(r => r.json());
+    const sel = document.getElementById('produtoId');
+    sel.innerHTML = '<option value="">Selecione...</option>' + cache.map(p => '<option value="' + p.id + '">' + p.nome + ' (' + p.quantidade + ' un. disponíveis)</option>').join('');
+    document.getElementById('data').value = new Date().toISOString().slice(0,10);
+    document.getElementById('infoPreco').style.display = 'none';
+    document.getElementById('totalEst').value = '';
+    document.getElementById('feira').value = '';
+    document.getElementById('quantidade').value = 1;
+    document.getElementById('overlay').classList.add('aberto');
+  }
+
+  function atualizarPreco() {
+    const p = cache.find(x => x.id === parseInt(document.getElementById('produtoId').value));
+    const info = document.getElementById('infoPreco');
+    if (p) { info.style.display = 'block'; info.innerHTML = 'Preço de venda: <strong>' + fmt(p.preco_venda) + '</strong> · Estoque: <strong>' + p.quantidade + ' un.</strong>'; calcTotal(); }
+    else { info.style.display = 'none'; document.getElementById('totalEst').value = ''; }
+  }
+
+  function calcTotal() {
+    const p = cache.find(x => x.id === parseInt(document.getElementById('produtoId').value));
+    const qtd = parseInt(document.getElementById('quantidade').value) || 0;
+    document.getElementById('totalEst').value = p ? fmt(p.preco_venda * qtd) : '';
+  }
+
+  function fechar() { document.getElementById('overlay').classList.remove('aberto'); }
+
+  async function registrar() {
+    const body = { produto_id: parseInt(document.getElementById('produtoId').value), quantidade: parseInt(document.getElementById('quantidade').value), feira: document.getElementById('feira').value, data: document.getElementById('data').value };
+    if (!body.produto_id || !body.quantidade || !body.feira || !body.data) return toast('Preencha todos os campos', 'erro');
+    const res = await fetch('/api/vendas', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d = await res.json();
+    if (!res.ok) return toast(d.erro, 'erro');
+    fechar(); toast('Venda registrada! Total: ' + fmt(d.valor_total), 'sucesso'); carregar();
+  }
+
+  async function cancelar(id) {
+    if (!confirm('Cancelar esta venda? O estoque será restaurado.')) return;
+    const res = await fetch('/api/vendas/'+id, { method:'DELETE' });
+    if (!res.ok) return toast('Erro ao cancelar', 'erro');
+    toast('Venda cancelada e estoque restaurado', 'sucesso'); carregar();
+  }
+
+  document.getElementById('overlay').addEventListener('click', e => { if (e.target === document.getElementById('overlay')) fechar(); });
+  init();
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GestorSemi — Estoque</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav>
+  <a href="index.html" class="nav-brand">Gestor<span>Semi</span></a>
+  <a href="index.html">Dashboard</a>
+  <a href="produtos.html">Produtos</a>
+  <a href="vendas.html">Vendas</a>
+  <a href="estoque.html" class="ativo">Estoque</a>
+  <a href="relatorio.html">Relatório</a>
+  <a href="usuarios.html" id="linkUsuarios">Usuários</a>
+  <div id="navUsuario"></div>
+</nav>
+<div class="container">
+  <div class="page-header">
+    <h1>Estoque</h1>
+    <p>Visualize e atualize as quantidades do estoque</p>
+  </div>
+  <div class="filtros">
+    <button class="filtro-btn ativo" id="fb-todos" onclick="filtrar('todos')">Todos</button>
+    <button class="filtro-btn" id="fb-Brinco" onclick="filtrar('Brinco')">Brincos</button>
+    <button class="filtro-btn" id="fb-Colar" onclick="filtrar('Colar')">Colares</button>
+    <button class="filtro-btn" id="fb-Pulseira" onclick="filtrar('Pulseira')">Pulseiras</button>
+    <button class="filtro-btn" id="fb-Anel" onclick="filtrar('Anel')">Anéis</button>
+    <button class="filtro-btn" id="fb-Tornozeleira" onclick="filtrar('Tornozeleira')">Tornozeleiras</button>
+    <button class="filtro-btn alerta" id="fb-baixo" onclick="filtrar('baixo')">⚠ Estoque baixo</button>
+  </div>
+  <div class="secao">
+    <div class="tabela-topo" style="margin-bottom:16px;">
+      <span id="totalLabel" style="font-size:0.9rem;color:#888">Carregando...</span>
+    </div>
+    <div class="tabela-wrapper">
+      <table>
+        <thead><tr><th>Produto</th><th>Categoria</th><th>Custo</th><th>Venda</th><th>Margem</th><th>Estoque</th><th id="thRepor"></th></tr></thead>
+        <tbody id="tbody"><tr><td colspan="7" class="vazio">Carregando...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="overlay">
+  <div class="modal">
+    <h2>Repor Estoque</h2>
+    <input type="hidden" id="produtoId">
+    <p id="produtoNome" style="margin-bottom:16px;color:#666;font-size:0.95rem;font-weight:500;"></p>
+    <div class="form-group"><label>Quantidade atual</label><input type="text" id="qtdAtual" readonly style="background:#f5f5f5;"></div>
+    <div class="form-group"><label>Adicionar ao estoque</label><input type="number" id="qtdAdd" min="1" value="1"></div>
+    <div class="modal-acoes">
+      <button class="btn btn-secundario" onclick="fechar()">Cancelar</button>
+      <button class="btn btn-primario" onclick="repor()">Confirmar reposição</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="js/auth.js"></script>
+<script>
+  let todos = [];
+  let filtroAtivo = 'todos';
+  let isAdmin = false;
+
+  function estoqueClass(q) { return q === 0 ? 'estoque-zero' : q <= 5 ? 'estoque-baixo' : 'estoque-ok'; }
+  function margem(c, v) { if (!c || c === 0) return '—'; const m = Math.round((v-c)/c*100); return '<span style="color:' + (m>=0?'#27ae60':'#c0392b') + ';font-weight:600">' + m + '%</span>'; }
+
+  async function init() {
+    const usuario = await verificarAuth();
+    if (!usuario) return;
+    isAdmin = usuario.perfil === 'admin';
+    configurarNavbar(usuario);
+    if (isAdmin) document.getElementById('thRepor').textContent = 'Reposição';
+    carregar();
+  }
+
+  async function carregar() {
+    const res = await fetch('/api/produtos');
+    todos = await res.json();
+    renderizar();
+  }
+
+  function filtrar(cat) {
+    filtroAtivo = cat;
+    document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('ativo'));
+    document.getElementById('fb-' + cat).classList.add('ativo');
+    renderizar();
+  }
+
+  function renderizar() {
+    let lista = [...todos];
+    if (filtroAtivo === 'baixo') lista = lista.filter(p => p.quantidade <= 5);
+    else if (filtroAtivo !== 'todos') lista = lista.filter(p => p.categoria === filtroAtivo);
+    lista.sort((a, b) => a.quantidade - b.quantidade);
+
+    document.getElementById('totalLabel').textContent = lista.length + ' produto(s) exibido(s)';
+    const tbody = document.getElementById('tbody');
+
+    if (lista.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="vazio">Nenhum produto encontrado neste filtro.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = lista.map(p =>
+      '<tr>' +
+      '<td><strong>' + p.nome + '</strong></td>' +
+      '<td><span class="badge badge-dourado">' + p.categoria + '</span></td>' +
+      '<td>' + fmt(p.preco_custo) + '</td>' +
+      '<td>' + fmt(p.preco_venda) + '</td>' +
+      '<td>' + margem(p.preco_custo, p.preco_venda) + '</td>' +
+      '<td><span class="' + estoqueClass(p.quantidade) + '">' + p.quantidade + ' un.</span></td>' +
+      '<td>' + (isAdmin ? '<button class="btn btn-editar" onclick="abrirModal(' + p.id + ',\'' + p.nome.replace(/'/g,"\\'") + '\',' + p.quantidade + ')">+ Repor</button>' : '') + '</td>' +
+      '</tr>'
+    ).join('');
+  }
+
+  function abrirModal(id, nome, qtd) {
+    document.getElementById('produtoId').value = id;
+    document.getElementById('produtoNome').textContent = nome;
+    document.getElementById('qtdAtual').value = qtd + ' unidade(s)';
+    document.getElementById('qtdAdd').value = 1;
+    document.getElementById('overlay').classList.add('aberto');
+  }
+
+  function fechar() { document.getElementById('overlay').classList.remove('aberto'); }
+
+  async function repor() {
+    const id = document.getElementById('produtoId').value;
+    const add = parseInt(document.getElementById('qtdAdd').value);
+    if (!add || add < 1) return toast('Informe uma quantidade válida', 'erro');
+    const p = await fetch('/api/produtos/' + id).then(r => r.json());
+    const res = await fetch('/api/produtos/' + id, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({...p, quantidade: p.quantidade + add}) });
+    if (!res.ok) return toast('Erro ao repor estoque', 'erro');
+    fechar();
+    toast('Estoque atualizado: ' + (p.quantidade + add) + ' unidades', 'sucesso');
+    carregar();
+  }
+
+  document.getElementById('overlay').addEventListener('click', e => { if (e.target === document.getElementById('overlay')) fechar(); });
+  init();
+</script>
+</body>
+</html>

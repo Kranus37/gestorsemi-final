@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GestorSemi — Relatório</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    @media print {
+      nav, .filtros-box, .no-print { display: none !important; }
+      body { background: white; }
+      .container { padding: 0; }
+      .secao { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+<nav>
+  <a href="index.html" class="nav-brand">Gestor<span>Semi</span></a>
+  <a href="index.html">Dashboard</a>
+  <a href="produtos.html">Produtos</a>
+  <a href="vendas.html">Vendas</a>
+  <a href="estoque.html">Estoque</a>
+  <a href="relatorio.html" class="ativo">Relatório</a>
+  <a href="usuarios.html" id="linkUsuarios">Usuários</a>
+  <div id="navUsuario"></div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1>Relatório de Vendas</h1>
+    <p>Analise o desempenho por período, feira e categoria</p>
+  </div>
+
+  <div class="secao filtros-box no-print">
+    <div class="secao-titulo">Filtros</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:16px;align-items:end;flex-wrap:wrap;">
+      <div class="form-group" style="margin:0">
+        <label>Data início</label>
+        <input type="date" id="dataInicio">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Data fim</label>
+        <input type="date" id="dataFim">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Feira</label>
+        <select id="filFeira">
+          <option value="todas">Todas as feiras</option>
+          <option>BsbMix</option>
+          <option>Feira da Lua</option>
+          <option>Outra</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Categoria</label>
+        <select id="filCategoria">
+          <option value="todas">Todas as categorias</option>
+          <option>Brinco</option>
+          <option>Colar</option>
+          <option>Pulseira</option>
+          <option>Anel</option>
+          <option>Tornozeleira</option>
+          <option>Conjunto</option>
+          <option>Outro</option>
+        </select>
+      </div>
+      <button class="btn btn-primario" onclick="filtrar()" style="height:42px">Filtrar</button>
+    </div>
+  </div>
+
+  <div id="resultado" style="display:none">
+    <div class="cards-grid" id="cardsResumo"></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+      <div class="secao">
+        <div class="secao-titulo">Receita por feira</div>
+        <table>
+          <thead><tr><th>Feira</th><th>Peças</th><th>Receita</th><th>%</th></tr></thead>
+          <tbody id="tbFeira"></tbody>
+        </table>
+      </div>
+      <div class="secao">
+        <div class="secao-titulo">Produtos mais vendidos</div>
+        <table>
+          <thead><tr><th>Produto</th><th>Qtd</th><th>Receita</th></tr></thead>
+          <tbody id="tbProdutos"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="secao">
+      <div class="secao-titulo" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Vendas no período</span>
+        <button class="btn btn-secundario no-print" onclick="window.print()" style="font-size:0.82rem;padding:6px 14px">🖨 Imprimir relatório</button>
+      </div>
+      <div class="tabela-wrapper">
+        <table>
+          <thead><tr><th>Data</th><th>Produto</th><th>Categoria</th><th>Feira</th><th>Qtd</th><th>Total</th><th>Registrado por</th></tr></thead>
+          <tbody id="tbVendas"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="vazio" class="secao" style="text-align:center;padding:48px;color:#888">
+    <p style="font-size:1rem">Selecione o período e clique em <strong>Filtrar</strong> para gerar o relatório.</p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="js/auth.js"></script>
+<script>
+  function fmtData(d) { if (!d) return '-'; const [a,m,dia] = d.split('-'); return dia+'/'+m+'/'+a; }
+
+  async function init() {
+    const usuario = await verificarAuth();
+    if (!usuario) return;
+    configurarNavbar(usuario);
+    const hoje = new Date().toISOString().slice(0,10);
+    const primeiroDia = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+    document.getElementById('dataInicio').value = primeiroDia;
+    document.getElementById('dataFim').value = hoje;
+  }
+
+  async function filtrar() {
+    const params = new URLSearchParams({
+      inicio: document.getElementById('dataInicio').value,
+      fim: document.getElementById('dataFim').value,
+      feira: document.getElementById('filFeira').value,
+      categoria: document.getElementById('filCategoria').value
+    });
+
+    const res = await fetch('/api/relatorio?' + params);
+    if (!res.ok) return toast('Erro ao gerar relatório', 'erro');
+    const d = await res.json();
+
+    document.getElementById('vazio').style.display = 'none';
+    document.getElementById('resultado').style.display = '';
+
+    document.getElementById('cardsResumo').innerHTML =
+      '<div class="card"><div class="card-label">Receita no período</div><div class="card-valor destaque">' + fmt(d.totalReceita) + '</div><div class="card-sub">' + d.totalVendas + ' transação(ões)</div></div>' +
+      '<div class="card"><div class="card-label">Peças vendidas</div><div class="card-valor">' + d.totalPecas + '</div><div class="card-sub">unidades no período</div></div>' +
+      '<div class="card"><div class="card-label">Ticket médio</div><div class="card-valor">' + (d.totalVendas > 0 ? fmt(d.totalReceita / d.totalVendas) : 'R$ 0,00') + '</div><div class="card-sub">por transação</div></div>' +
+      '<div class="card"><div class="card-label">Feiras no período</div><div class="card-valor">' + d.porFeira.length + '</div><div class="card-sub">com vendas registradas</div></div>';
+
+    document.getElementById('tbFeira').innerHTML = d.porFeira.length === 0 ? '<tr><td colspan="4" class="vazio">Nenhuma venda</td></tr>' :
+      d.porFeira.map(f => '<tr><td><span class="badge badge-dourado">' + f.feira + '</span></td><td>' + f.quantidade + ' un.</td><td><strong>' + fmt(f.receita) + '</strong></td><td style="color:#888">' + (d.totalReceita > 0 ? Math.round(f.receita/d.totalReceita*100) : 0) + '%</td></tr>').join('');
+
+    document.getElementById('tbProdutos').innerHTML = d.porProduto.length === 0 ? '<tr><td colspan="3" class="vazio">Nenhuma venda</td></tr>' :
+      d.porProduto.slice(0,8).map(p => '<tr><td><strong>' + p.nome + '</strong><br><small style="color:#888">' + p.categoria + '</small></td><td>' + p.quantidade + ' un.</td><td>' + fmt(p.receita) + '</td></tr>').join('');
+
+    document.getElementById('tbVendas').innerHTML = d.vendas.length === 0 ? '<tr><td colspan="7" class="vazio">Nenhuma venda no período selecionado</td></tr>' :
+      d.vendas.map(v => '<tr><td>' + fmtData(v.data) + '</td><td><strong>' + v.produto_nome + '</strong></td><td><span class="badge badge-dourado">' + v.produto_categoria + '</span></td><td><span class="badge badge-dourado">' + v.feira + '</span></td><td>' + v.quantidade + ' un.</td><td><strong>' + fmt(v.valor_total) + '</strong></td><td style="color:#888;font-size:0.85rem">' + (v.registrado_por || '—') + '</td></tr>').join('');
+  }
+
+  init();
+</script>
+</body>
+</html>

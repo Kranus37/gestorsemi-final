@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GestorSemi — Usuários</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav>
+  <a href="index.html" class="nav-brand">Gestor<span>Semi</span></a>
+  <a href="index.html">Dashboard</a>
+  <a href="produtos.html">Produtos</a>
+  <a href="vendas.html">Vendas</a>
+  <a href="estoque.html">Estoque</a>
+  <a href="relatorio.html">Relatório</a>
+  <a href="usuarios.html" id="linkUsuarios" class="ativo">Usuários</a>
+  <div id="navUsuario"></div>
+</nav>
+<div class="container">
+  <div class="page-header">
+    <h1>Usuários</h1>
+    <p>Gerencie os acessos ao sistema</p>
+  </div>
+  <div class="secao">
+    <div class="tabela-topo">
+      <span id="totalLabel" style="font-size:0.9rem;color:#888">Carregando...</span>
+      <button class="btn btn-primario" onclick="abrirNovo()">+ Novo usuário</button>
+    </div>
+    <div class="tabela-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Login</th>
+            <th>Perfil</th>
+            <th>Permissões</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"><tr><td colspan="5" class="vazio">Carregando...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="overlay">
+  <div class="modal">
+    <h2 id="modalTitulo">Novo Usuário</h2>
+    <input type="hidden" id="usuarioId">
+    <div class="form-group">
+      <label>Nome completo</label>
+      <input type="text" id="nome" placeholder="Ex: Maria Silva">
+    </div>
+    <div class="form-group">
+      <label>Login</label>
+      <input type="text" id="login" placeholder="Ex: maria.silva">
+    </div>
+    <div class="form-group">
+      <label>Senha <span id="senhaHint" style="font-weight:400;text-transform:none;letter-spacing:0;">(deixe em branco para não alterar)</span></label>
+      <input type="password" id="senha" placeholder="Nova senha">
+    </div>
+    <div class="form-group">
+      <label>Perfil</label>
+      <select id="perfil">
+        <option value="">Selecione...</option>
+        <option value="admin">Admin (proprietária) — acesso total</option>
+        <option value="funcionario">Funcionário — registra vendas, visualiza produtos e estoque</option>
+      </select>
+    </div>
+    <div id="resumoPermissoes" style="display:none;background:#fdf8f0;border:1px solid #e8dcc8;border-radius:8px;padding:12px 14px;margin-top:4px;font-size:0.83rem;color:#666;"></div>
+    <div class="modal-acoes">
+      <button class="btn btn-secundario" onclick="fechar()">Cancelar</button>
+      <button class="btn btn-primario" onclick="salvar()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="js/auth.js"></script>
+<script>
+  let usuarioAtual = null;
+
+  const permissoes = {
+    admin: ['Ver dashboard', 'Cadastrar / editar / excluir produtos', 'Registrar e cancelar vendas', 'Repor estoque', 'Gerenciar usuários'],
+    funcionario: ['Ver dashboard', 'Visualizar produtos e estoque', 'Registrar vendas']
+  };
+
+  async function init() {
+    const usuario = await verificarAuth();
+    if (!usuario) return;
+    if (usuario.perfil !== 'admin') { window.location.href = '/index.html'; return; }
+    usuarioAtual = usuario;
+    configurarNavbar(usuario);
+    carregar();
+  }
+
+  async function carregar() {
+    const usuarios = await fetch('/api/usuarios').then(r => r.json());
+    document.getElementById('totalLabel').textContent = usuarios.length + ' usuário(s) cadastrado(s)';
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = usuarios.map(u =>
+      '<tr>' +
+      '<td><strong>' + u.nome + '</strong>' + (u.id === usuarioAtual.id ? ' <span style="font-size:0.75rem;color:#c9a84c">(você)</span>' : '') + '</td>' +
+      '<td><code style="background:#f5f5f5;padding:2px 8px;border-radius:4px;font-size:0.85rem">' + u.login + '</code></td>' +
+      '<td><span class="badge ' + (u.perfil === 'admin' ? 'badge-admin' : 'badge-func') + '">' + (u.perfil === 'admin' ? 'Admin' : 'Funcionário') + '</span></td>' +
+      '<td style="font-size:0.82rem;color:#888">' + permissoes[u.perfil].join(' · ') + '</td>' +
+      '<td><div class="acoes">' +
+      '<button class="btn btn-editar" onclick="editar(' + u.id + ')">Editar</button>' +
+      (u.id !== usuarioAtual.id ? '<button class="btn btn-perigo" onclick="excluir(' + u.id + ',\'' + u.nome.replace(/'/g,"\\'") + '\')">Excluir</button>' : '') +
+      '</div></td>' +
+      '</tr>'
+    ).join('');
+  }
+
+  function abrirNovo() {
+    document.getElementById('modalTitulo').textContent = 'Novo Usuário';
+    document.getElementById('usuarioId').value = '';
+    document.getElementById('senhaHint').style.display = 'none';
+    ['nome','login','senha'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('perfil').value = '';
+    document.getElementById('resumoPermissoes').style.display = 'none';
+    document.getElementById('overlay').classList.add('aberto');
+  }
+
+  async function editar(id) {
+    const usuarios = await fetch('/api/usuarios').then(r => r.json());
+    const u = usuarios.find(x => x.id === id);
+    document.getElementById('modalTitulo').textContent = 'Editar Usuário';
+    document.getElementById('usuarioId').value = u.id;
+    document.getElementById('nome').value = u.nome;
+    document.getElementById('login').value = u.login;
+    document.getElementById('senha').value = '';
+    document.getElementById('perfil').value = u.perfil;
+    document.getElementById('senhaHint').style.display = '';
+    atualizarResumo(u.perfil);
+    document.getElementById('overlay').classList.add('aberto');
+  }
+
+  document.getElementById('perfil').addEventListener('change', function() { atualizarResumo(this.value); });
+
+  function atualizarResumo(p) {
+    const div = document.getElementById('resumoPermissoes');
+    if (!p) { div.style.display = 'none'; return; }
+    div.style.display = 'block';
+    div.innerHTML = '<strong style="color:#2c2c2c">Permissões deste perfil:</strong><ul style="margin:6px 0 0 16px;line-height:1.8">' + permissoes[p].map(x => '<li>' + x + '</li>').join('') + '</ul>';
+  }
+
+  function fechar() { document.getElementById('overlay').classList.remove('aberto'); }
+
+  async function salvar() {
+    const id = document.getElementById('usuarioId').value;
+    const body = {
+      nome: document.getElementById('nome').value.trim(),
+      login: document.getElementById('login').value.trim(),
+      perfil: document.getElementById('perfil').value
+    };
+    const senha = document.getElementById('senha').value;
+    if (senha) body.senha = senha;
+    if (!body.nome || !body.login || !body.perfil) return toast('Preencha todos os campos obrigatórios', 'erro');
+    if (!id && !senha) return toast('Informe uma senha para o novo usuário', 'erro');
+    const url = id ? '/api/usuarios/' + id : '/api/usuarios';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if (!res.ok) { const e = await res.json(); return toast(e.erro, 'erro'); }
+    fechar(); toast(id ? 'Usuário atualizado!' : 'Usuário criado!', 'sucesso'); carregar();
+  }
+
+  async function excluir(id, nome) {
+    if (!confirm('Excluir o usuário "' + nome + '"? Ele perderá o acesso ao sistema.')) return;
+    const res = await fetch('/api/usuarios/' + id, { method: 'DELETE' });
+    if (!res.ok) { const e = await res.json(); return toast(e.erro, 'erro'); }
+    toast('Usuário excluído', 'sucesso'); carregar();
+  }
+
+  document.getElementById('overlay').addEventListener('click', e => { if (e.target === document.getElementById('overlay')) fechar(); });
+  init();
+</script>
+</body>
+</html>

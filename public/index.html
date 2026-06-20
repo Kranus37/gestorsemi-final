@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GestorSemi — Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav>
+  <a href="index.html" class="nav-brand">Gestor<span>Semi</span></a>
+  <a href="index.html" class="ativo">Dashboard</a>
+  <a href="produtos.html">Produtos</a>
+  <a href="vendas.html">Vendas</a>
+  <a href="estoque.html">Estoque</a>
+  <a href="relatorio.html">Relatório</a>
+  <a href="usuarios.html" id="linkUsuarios">Usuários</a>
+  <div id="navUsuario"></div>
+</nav>
+<div class="container">
+  <div class="page-header">
+    <h1>Dashboard</h1>
+    <p>Resumo do negócio — Maison Les Sis</p>
+  </div>
+  <div id="alertaEstoque"></div>
+  <div class="cards-grid">
+    <div class="card"><div class="card-label">Receita do mês</div><div class="card-valor destaque" id="receitaMes">—</div><div class="card-sub" id="vendasMes">carregando...</div></div>
+    <div class="card"><div class="card-label">Receita total</div><div class="card-valor" id="receitaTotal">—</div><div class="card-sub">desde o início</div></div>
+    <div class="card"><div class="card-label">Produtos cadastrados</div><div class="card-valor" id="totalProdutos">—</div><div class="card-sub">no catálogo</div></div>
+    <div class="card"><div class="card-label">Estoque baixo</div><div class="card-valor" id="estoqueBaixoCount">—</div><div class="card-sub">5 unidades ou menos</div></div>
+  </div>
+  <div class="dash-grid">
+    <div class="secao">
+      <div class="secao-titulo">Produtos mais vendidos</div>
+      <table><thead><tr><th>Produto</th><th>Qtd</th><th>Receita</th></tr></thead><tbody id="tbMV"><tr><td colspan="3" class="vazio">Carregando...</td></tr></tbody></table>
+    </div>
+    <div class="secao">
+      <div class="secao-titulo">Desempenho por feira</div>
+      <table><thead><tr><th>Feira</th><th>Peças</th><th>Receita</th></tr></thead><tbody id="tbFeira"><tr><td colspan="3" class="vazio">Carregando...</td></tr></tbody></table>
+    </div>
+  </div>
+  <div class="secao">
+    <div class="secao-titulo">⚠ Estoque baixo (≤ 5 unidades)</div>
+    <table><thead><tr><th>Produto</th><th>Categoria</th><th>Estoque</th><th>Preço de venda</th></tr></thead><tbody id="tbEB"><tr><td colspan="4" class="vazio">Carregando...</td></tr></tbody></table>
+  </div>
+</div>
+<script src="js/auth.js"></script>
+<script>
+  async function init() {
+    const usuario = await verificarAuth();
+    if (!usuario) return;
+    configurarNavbar(usuario);
+    const d = await fetch('/api/dashboard').then(r => r.json());
+    document.getElementById('receitaMes').textContent = fmt(d.totalMes.receita);
+    document.getElementById('vendasMes').textContent = d.totalMes.quantidade + ' venda(s) este mês';
+    document.getElementById('receitaTotal').textContent = fmt(d.totalVendas);
+    document.getElementById('totalProdutos').textContent = d.totalProdutos;
+    document.getElementById('estoqueBaixoCount').textContent = d.estoqueBaixo.length;
+    if (d.estoqueBaixo.length > 0) document.getElementById('alertaEstoque').innerHTML = '<div class="alerta-estoque"><strong>Atenção: ' + d.estoqueBaixo.length + ' produto(s) com estoque baixo</strong>' + d.estoqueBaixo.map(p => p.nome + ' (' + p.quantidade + ' un.)').join(' · ') + '</div>';
+    document.getElementById('tbMV').innerHTML = d.maisPedidos.length === 0 ? '<tr><td colspan="3" class="vazio">Nenhuma venda ainda</td></tr>' : d.maisPedidos.map(p => '<tr><td><strong>' + p.nome + '</strong><br><small style="color:#888">' + p.categoria + '</small></td><td>' + p.total_vendido + ' un.</td><td>' + fmt(p.receita) + '</td></tr>').join('');
+    document.getElementById('tbFeira').innerHTML = d.porFeira.length === 0 ? '<tr><td colspan="3" class="vazio">Nenhuma venda ainda</td></tr>' : d.porFeira.map(f => '<tr><td><span class="badge badge-dourado">' + f.feira + '</span></td><td>' + f.pecas_vendidas + ' peças</td><td>' + fmt(f.receita) + '</td></tr>').join('');
+    document.getElementById('tbEB').innerHTML = d.estoqueBaixo.length === 0 ? '<tr><td colspan="4" class="vazio">Todos os produtos estão com estoque normal ✓</td></tr>' : d.estoqueBaixo.map(p => '<tr><td><strong>' + p.nome + '</strong></td><td><span class="badge badge-dourado">' + p.categoria + '</span></td><td><span class="' + (p.quantidade === 0 ? 'estoque-zero' : 'estoque-baixo') + '">' + p.quantidade + ' un.</span></td><td>' + fmt(p.preco_venda) + '</td></tr>').join('');
+  }
+  init();
+</script>
+</body>
+</html>
